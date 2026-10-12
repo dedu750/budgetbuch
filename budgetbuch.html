@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Budgetbuch</title>
+<style>
+:root{
+  --font:"Segoe UI Variable Text","Segoe UI","Avenir Next","SF Pro Text",system-ui,sans-serif;
+  --paper:#F2F4F7; --raise:#FFFFFF; --ink:#0F1B2D; --muted:#5A687A; --rule:#D3DAE3; --track:#DCE2EA;
+  --accent:#1B47E8; --accent-ink:#FFFFFF; --ok:#0B8F7F; --warn:#A36B00; --warn-fill:#E0A100; --over:#C8253F;
+  --tick:var(--paper);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --paper:#0E141C; --raise:#17212D; --ink:#E8EDF3; --muted:#92A0B3; --rule:#283445; --track:#223040;
+    --accent:#6B8CFF; --accent-ink:#08101F; --ok:#2EC4B0; --warn:#E8B02F; --warn-fill:#E8B02F; --over:#FF6B80;
+  }
+}
+*{box-sizing:border-box}
+html{color-scheme:light dark}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 var(--font);-webkit-font-smoothing:antialiased}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1120px;margin:0 auto;padding:clamp(16px,4vw,40px)}
+
+/* Kopfzeile */
+.top{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px 28px;margin-bottom:clamp(28px,5vw,52px)}
+h1{margin:0;font-size:1.5rem;font-weight:650;letter-spacing:-.015em}
+.months{display:flex;align-items:center;gap:2px}
+.month-label{min-width:10.5ch;text-align:center;font-size:1.1rem;font-weight:600}
+.step-btn{width:40px;height:40px;border:0;border-radius:10px;background:transparent;font-size:1.5rem;line-height:1;color:var(--muted)}
+.step-btn:hover{background:var(--raise);color:var(--ink)}
+.text-btn{border:0;background:none;color:var(--accent);padding:6px 8px;border-radius:6px;font-weight:550}
+.text-btn:hover{text-decoration:underline}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:1.5px solid var(--rule);background:transparent;border-radius:10px;padding:.6rem 1.05rem;font-weight:550}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.danger{border-color:var(--over);color:var(--over)}
+.btn.danger.solid{background:var(--over);color:#fff}
+
+/* Hauptlayout */
+.grid{display:grid;gap:clamp(32px,5vw,64px)}
+@media(min-width:960px){.grid{grid-template-columns:minmax(0,5fr) minmax(0,4fr);align-items:start}}
+.sec{margin:0 0 4px;font-size:1.05rem;font-weight:650}
+.sec-sub{margin:0 0 14px;color:var(--muted);font-size:.92rem}
+
+/* Budgets */
+.budget{position:relative;border-top:1px solid var(--rule);--tick:var(--paper)}
+.budget:last-child{border-bottom:1px solid var(--rule)}
+.budget.is-sel{background:var(--raise);box-shadow:inset 4px 0 0 var(--accent);--tick:var(--raise)}
+.pick{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:20px;width:100%;text-align:left;border:0;background:none;padding:20px 16px 22px 20px}
+.pick:focus-visible{outline-offset:-3px}
+.b-name{grid-column:1;grid-row:1;align-self:end;font-size:1.15rem;font-weight:620;letter-spacing:-.01em;overflow-wrap:anywhere}
+.b-limit{grid-column:1;grid-row:2;color:var(--muted);font-size:.92rem}
+.b-left{grid-column:2;grid-row:1 / span 2;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.b-left b{font-size:clamp(2.1rem,6vw,2.8rem);font-weight:300;letter-spacing:-.03em;line-height:1.05}
+.b-left small{font-size:1.05rem;color:var(--muted)}
+.b-left em{display:block;font-style:normal;font-size:.85rem;color:var(--muted);margin-top:2px}
+.b-left.st-warn b{color:var(--warn)}
+.b-left.st-over b,.b-left.st-over em{color:var(--over)}
+.gauge{grid-column:1 / -1;grid-row:3;position:relative;display:block;height:14px;margin:16px 0 10px;background:var(--track);border-radius:3px;overflow:hidden}
+.gauge i{display:block;height:100%;background:var(--ok)}
+.gauge.st-warn i{background:var(--warn-fill)}
+.gauge.st-over i{background:var(--over)}
+.gauge::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(90deg,transparent 0,transparent calc(10% - 2px),var(--tick) calc(10% - 2px),var(--tick) 10%)}
+.b-spent{grid-column:1 / -1;grid-row:4;color:var(--muted);font-size:.92rem;padding-right:6rem}
+.edit{position:absolute;right:12px;bottom:12px;border:0;background:none;color:var(--muted);font-size:.85rem;padding:4px 6px;border-radius:6px}
+.edit:hover{color:var(--accent);text-decoration:underline}
+.intro .gauge i{animation:grow .9s cubic-bezier(.2,.7,.2,1) both}
+@keyframes grow{from{width:0}}
+
+/* Buchungen */
+.entries{list-style:none;margin:0;padding:0}
+.entry{display:grid;grid-template-columns:5.6rem minmax(0,1fr) auto;gap:2px 12px;align-items:baseline;padding:12px 0;border-top:1px solid var(--rule)}
+.entry:last-child{border-bottom:1px solid var(--rule)}
+.e-date{color:var(--muted);font-size:.9rem;font-variant-numeric:tabular-nums}
+.e-main{min-width:0;overflow-wrap:anywhere}
+.e-main small{display:block;color:var(--muted);font-size:.85rem}
+.e-main .none{color:var(--muted)}
+.e-amt{font-variant-numeric:tabular-nums;font-weight:600;text-align:right;white-space:nowrap}
+.e-act{grid-column:2 / -1;display:flex;gap:4px}
+.e-act button{border:0;background:none;color:var(--muted);font-size:.85rem;padding:2px 6px 2px 0;border-radius:6px}
+.e-act button:hover{color:var(--accent);text-decoration:underline}
+.e-act button.del:hover{color:var(--over)}
+.total{display:flex;justify-content:space-between;padding:14px 0 0;font-weight:650;font-variant-numeric:tabular-nums}
+.empty{color:var(--muted);padding:18px 0}
+.welcome{max-width:34rem;padding:clamp(8px,4vw,40px) 0}
+.welcome h2{font-size:clamp(1.8rem,5vw,2.6rem);font-weight:600;letter-spacing:-.025em;line-height:1.15;margin:0 0 14px}
+.welcome p{color:var(--muted);margin:0 0 24px}
+.foot-note{margin-top:clamp(32px,6vw,64px);color:var(--muted);font-size:.85rem}
+
+/* Dialog */
+dialog{border:0;padding:0;border-radius:16px;background:var(--raise);color:var(--ink);width:min(520px,calc(100vw - 24px));max-height:calc(100vh - 24px);box-shadow:0 28px 70px rgba(8,16,31,.4)}
+dialog::backdrop{background:rgba(8,16,31,.55)}
+.dlg{padding:clamp(20px,5vw,32px)}
+.progress{display:flex;gap:6px;margin-bottom:28px}
+.progress span{flex:1;height:4px;border-radius:2px;background:var(--track)}
+.progress span.on{background:var(--accent)}
+.dlg h2{margin:0 0 6px;font-size:clamp(1.55rem,5vw,1.9rem);font-weight:600;letter-spacing:-.02em;line-height:1.2}
+.ctx{margin:0 0 22px;color:var(--muted);min-height:1.5em;overflow-wrap:anywhere}
+.field{margin-bottom:16px}
+.field label,.seg legend{display:block;margin-bottom:6px;font-weight:600;font-size:.92rem}
+input[type=text],input[type=date],select{width:100%;padding:.75rem .9rem;font-size:1.15rem;border:1.5px solid var(--rule);border-radius:10px;background:var(--paper);color:var(--ink)}
+input:focus,select:focus{border-color:var(--accent);outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 28%,transparent)}
+.amount-wrap{position:relative}
+.amount-wrap input{padding-right:3rem;font-size:2rem;font-weight:300;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.amount-wrap span{position:absolute;right:1rem;top:50%;transform:translateY(-50%);font-size:1.5rem;color:var(--muted);pointer-events:none}
+.chips{display:flex;gap:8px;margin-top:10px}
+.chip{border:1.5px solid var(--rule);background:transparent;border-radius:999px;padding:.3rem .9rem;font-size:.92rem}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.choice{display:flex;justify-content:space-between;align-items:baseline;gap:16px;width:100%;text-align:left;margin-bottom:8px;padding:14px 16px;border:1.5px solid var(--rule);border-radius:10px;background:transparent}
+.choice:hover{border-color:var(--muted)}
+.choice.on{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.choice span{font-weight:600;overflow-wrap:anywhere}
+.choice small{color:var(--muted);white-space:nowrap;font-variant-numeric:tabular-nums}
+.preview{min-height:1.5em;margin:8px 0 0;color:var(--muted);font-size:.95rem}
+.preview.over{color:var(--over)}
+.err{min-height:1.4em;margin:4px 0 0;color:var(--over);font-size:.92rem}
+.foot{display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;margin-top:20px}
+.foot .grow{margin-right:auto}
+.seg{border:0;padding:0;margin:0 0 16px}
+.seg .opts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.seg label{position:relative;margin:0;font-weight:500}
+.seg input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
+.seg span{display:block;text-align:center;padding:.65rem .4rem;border:1.5px solid var(--rule);border-radius:10px;font-size:.95rem}
+.seg input:checked+span{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);font-weight:600}
+.seg input:focus-visible+span{outline:3px solid var(--accent);outline-offset:2px}
+.hint{color:var(--muted);font-size:.88rem;margin:0 0 8px}
+
+/* Hinweis */
+#toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:10;display:flex;align-items:center;gap:16px;max-width:min(560px,calc(100vw - 24px));padding:12px 16px;border-radius:12px;background:var(--ink);color:var(--paper);box-shadow:0 12px 32px rgba(8,16,31,.35);font-size:.95rem}
+#toast[hidden]{display:none}
+#toast button{border:0;background:none;color:inherit;font-weight:650;text-decoration:underline;padding:2px 4px;white-space:nowrap}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+/* Jahresübersicht */
+.tabs{display:flex;gap:22px;margin:0 0 20px;border-bottom:1px solid var(--rule)}
+.tab{border:0;background:none;padding:8px 0 10px;margin-bottom:-1px;color:var(--muted);font-weight:600;border-bottom:3px solid transparent}
+.tab[aria-pressed=true]{color:var(--ink);border-bottom-color:var(--accent)}
+.y-block{margin-bottom:36px}
+.y-name{margin:0 0 8px;font-size:1.05rem;font-weight:650;overflow-wrap:anywhere}
+.y-sum b{display:block;font-size:clamp(1.9rem,5vw,2.4rem);font-weight:300;letter-spacing:-.025em;line-height:1.1;font-variant-numeric:tabular-nums}
+.y-sum span{display:block;color:var(--muted)}
+.y-sum small{display:block;margin-top:6px;color:var(--muted);font-size:.88rem}
+.ytable{width:100%;border-collapse:collapse;margin-top:18px;font-size:.92rem;font-variant-numeric:tabular-nums}
+.ytable th,.ytable td{padding:9px 6px;text-align:right;white-space:nowrap;border-top:1px solid var(--rule)}
+.ytable thead th{border-top:0;padding-top:0;color:var(--muted);font-size:.82rem;font-weight:600}
+.ytable th:first-child,.ytable td:first-child{text-align:left;padding-left:8px}
+.ytable tbody th{font-weight:500}
+.ytable tr.future th,.ytable tr.future td{color:var(--muted)}
+.ytable tr.off td,.ytable tr.off th{color:var(--muted)}
+.ytable tr.now th,.ytable tr.now td{background:var(--raise);font-weight:650;color:var(--ink)}
+.ytable tr.now th:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+.ytable td.neg{color:var(--over)}
+.mbtn{border:0;background:none;padding:6px 0;font:inherit;font-weight:inherit;color:inherit;text-align:left;cursor:pointer}
+.neg{color:var(--over)}
+@media (hover:hover){.mbtn:hover{color:var(--accent);text-decoration:underline}}
+@media (pointer:coarse){.tab{padding:12px 0 12px}.mbtn{padding:10px 0}}
+@media (max-width:600px){.ytable{font-size:.84rem}.ytable th,.ytable td{padding:9px 3px}}
+/* Gesamtsaldo und Team-Events */
+.summary{display:grid;margin:0 0 clamp(28px,5vw,48px);border-top:2px solid var(--ink);border-bottom:1px solid var(--rule)}
+.sm-main,.sm-item{padding:18px 0}
+.sm-item{border-top:1px solid var(--rule)}
+.sm-label{display:block;color:var(--muted);font-size:.92rem}
+.sm-sub{display:block;color:var(--muted);font-size:.88rem}
+.sm-num{display:block;font-variant-numeric:tabular-nums;white-space:nowrap}
+.sm-num b{font-size:clamp(2.6rem,9vw,4.2rem);font-weight:300;letter-spacing:-.035em;line-height:1.05}
+.sm-num small{font-size:clamp(1.1rem,3vw,1.5rem);color:var(--muted)}
+.sm-num.neg b{color:var(--over)}
+.sm-item strong{display:block;font-size:1.3rem;font-weight:600;letter-spacing:-.01em;font-variant-numeric:tabular-nums}
+.sm-item strong.neg{color:var(--over)}
+.sm-link{display:block;width:100%;text-align:left;border:0;background:none;color:inherit;font:inherit;cursor:pointer}
+@media(min-width:960px){
+  .summary{grid-template-columns:minmax(0,5fr) minmax(0,2.3fr) minmax(0,2.3fr);column-gap:32px;align-items:end}
+  .sm-item{border-top:0}
+}
+.events{list-style:none;margin:20px 0 14px;padding:0}
+.ev{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:12px 0 8px 14px;border-top:1px solid var(--rule);box-shadow:inset 3px 0 0 var(--ok)}
+.ev:last-child{border-bottom:1px solid var(--rule)}
+.ev.no{box-shadow:inset 3px 0 0 var(--over)}
+.ev-name{font-weight:600;overflow-wrap:anywhere}
+.ev-state{display:block;color:var(--muted);font-size:.88rem}
+.ev.no .ev-state{color:var(--over)}
+.ev-amt{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+.ev-act{grid-column:1 / -1;display:flex;flex-wrap:wrap;gap:2px}
+.ev-act button{border:0;background:none;color:var(--muted);font-size:.85rem;padding:4px 14px 4px 0;border-radius:6px;cursor:pointer}
+.ev-act button[disabled]{opacity:.35;cursor:default}
+.ev-act button.del:hover{color:var(--over)}
+@media (hover:hover){.ev-act button:not([disabled]):hover{color:var(--accent);text-decoration:underline}.ev-act button.del:hover{color:var(--over)}}
+@media (pointer:coarse){.ev-act button{padding:12px 16px 12px 0}}
+.amount-wrap.sm input{font-size:1.3rem;font-weight:400;padding-top:.6rem;padding-bottom:.6rem}
+.amount-wrap.sm span{font-size:1.1rem}
+.ytable.names th:first-child{white-space:normal}
+.ytable tfoot th,.ytable tfoot td{font-weight:650}
+.ev-head{margin:28px 0 0;font-size:1.05rem;font-weight:650}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body class="intro">
+<div class="wrap">
+  <header class="top">
+    <h1>Budgetbuch</h1>
+    <div class="months" role="group" aria-label="Monat wählen">
+      <button class="step-btn" data-act="prev-month" aria-label="Vorheriger Monat">&#8249;</button>
+      <div class="month-label" id="month-label" aria-live="polite"></div>
+      <button class="step-btn" data-act="next-month" aria-label="Nächster Monat">&#8250;</button>
+      <button class="text-btn" data-act="this-month" id="this-month" hidden>Aktueller Monat</button>
+    </div>
+    <div class="actions">
+      <button class="btn primary" data-act="add-expense">Ausgabe erfassen</button>
+      <button class="btn" data-act="new-budget">Budget anlegen</button>
+      <button class="btn" data-act="backup">Sichern</button>
+    </div>
+  </header>
+  <main id="app"><p class="empty">Lade Daten …</p></main>
+  <p class="foot-note">Änderungen werden automatisch gespeichert. Mit „Sichern“ erstellst du Backups und Excel-Exporte.</p>
+</div>
+
+<dialog id="dlg" aria-labelledby="dlg-title"></dialog>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+<input type="file" id="file" accept="application/json,.json" class="sr" tabindex="-1" aria-hidden="true">
+
+<script>
+(() => {
+'use strict';
+const KEY = 'budgetbuch:v1';
+const MONTHS = ['Januar','Februar','März','April','Mai','Juni','Juli','August','September','Oktober','November','Dezember'];
+const PERIODS = { month:'pro Monat', year:'pro Jahr', total:'insgesamt' };
+
+let data = { budgets: [], expenses: [], plan: { scope:'all', expected:0, events:[] } };
+let view = { ym: todayStr().slice(0,7), sel: null, tab: 'ledger' };
+let loaded = false, wiz = null, bd = null, dmode = '', undoFn = null, toastTimer, warned = false;
+
+const $ = (s, r = document) => r.querySelector(s);
+const dlg = $('#dlg');
+
+/* ---------- Hilfsfunktionen ---------- */
+function pad(n){ return String(n).padStart(2,'0'); }
+function todayStr(d = new Date()){ return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function yesterdayStr(){ const d = new Date(); d.setDate(d.getDate()-1); return todayStr(d); }
+function r2(v){ return Math.round(v*100)/100; }
+function uid(){ return Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function eur(v){ return v.toLocaleString('de-DE',{style:'currency',currency:'EUR'}); }
+function splitNum(v){
+  const s = Math.abs(v).toLocaleString('de-DE',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const k = s.lastIndexOf(','); return [s.slice(0,k), s.slice(k+1)];
+}
+function monthLabel(ym){ const [y,m] = ym.split('-'); return `${MONTHS[+m-1]} ${y}`; }
+function shiftMonth(ym, d){
+  let [y,m] = ym.split('-').map(Number); m += d;
+  while(m > 12){ m -= 12; y++; } while(m < 1){ m += 12; y--; }
+  return `${y}-${pad(m)}`;
+}
+function fmtDate(s, full){
+  const [y,m,d] = s.split('-').map(Number);
+  if(full) return `${pad(d)}.${pad(m)}.${y}`;
+  return new Date(y,m-1,d).toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'});
+}
+function parseAmount(s){
+  s = String(s).trim().replace(/[€\s]/g,'');
+  if(!s) return NaN;
+  if(s.includes(',')) s = s.replace(/\./g,'').replace(',','.');
+  else if(/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g,'');
+  const n = Number(s);
+  return isFinite(n) ? r2(n) : NaN;
+}
+function inputAmount(v){ return v.toFixed(2).replace('.',','); }
+
+/* ---------- Speicher ---------- */
+async function loadData(){
+  try{ if(window.storage){ const r = await window.storage.get(KEY); if(r && r.value) return JSON.parse(r.value); } }catch(e){}
+  try{ const v = window.localStorage.getItem(KEY); if(v) return JSON.parse(v); }catch(e){}
+  return null;
+}
+async function persist(){
+  const json = JSON.stringify(data);
+  try{ if(window.storage){ const r = await window.storage.set(KEY, json); if(r) return; } }catch(e){}
+  try{ window.localStorage.setItem(KEY, json); return; }catch(e){}
+  if(!warned){ warned = true; toast('Speichern ist hier nicht möglich. Bitte lege regelmäßig ein Backup über „Sichern“ an.'); }
+}
+function sanitize(o){
+  if(!o || !Array.isArray(o.budgets) || !Array.isArray(o.expenses)) throw new Error('format');
+  const budgets = o.budgets.filter(b => b && typeof b.id === 'string' && typeof b.name === 'string' && typeof b.amount === 'number' && b.amount > 0 && PERIODS[b.period])
+    .map(b => ({id:b.id, name:b.name.slice(0,60), amount:r2(b.amount), period:b.period, start:(b.period === 'month' && /^\d{4}-\d{2}$/.test(b.start || '')) ? b.start : undefined}));
+  const ids = new Set(budgets.map(b => b.id));
+  const expenses = o.expenses.filter(e => e && typeof e.id === 'string' && ids.has(e.budgetId) && /^\d{4}-\d{2}-\d{2}$/.test(e.date) && typeof e.amount === 'number' && e.amount > 0)
+    .map(e => ({id:e.id, budgetId:e.budgetId, date:e.date, amount:r2(e.amount), note:String(e.note||'').slice(0,120), ts:Number(e.ts)||0}));
+  const pl = o.plan || {};
+  const events = Array.isArray(pl.events) ? pl.events.filter(e => e && typeof e.id === 'string' && typeof e.name === 'string' && typeof e.amount === 'number' && e.amount > 0).map(e => ({id:e.id, name:e.name.slice(0,60), amount:r2(e.amount)})) : [];
+  const plan = { scope:(pl.scope === 'all' || ids.has(pl.scope)) ? pl.scope : 'all', expected:(typeof pl.expected === 'number' && pl.expected > 0) ? r2(pl.expected) : 0, events };
+  return { budgets, expenses, plan };
+}
+
+/* ---------- Berechnung ---------- */
+function inPeriod(b, e, ym){
+  if(e.budgetId !== b.id) return false;
+  if(b.period === 'month') return e.date.startsWith(ym);
+  if(b.period === 'year') return e.date.startsWith(ym.slice(0,4));
+  return true;
+}
+function stats(b, ym, excludeId){
+  const spent = r2(data.expenses.filter(e => e.id !== excludeId && inPeriod(b,e,ym)).reduce((s,e) => s + e.amount, 0));
+  return { spent, left: r2(b.amount - spent), ratio: b.amount > 0 ? spent / b.amount : 0 };
+}
+function paceHint(b, s){
+  if(b.period !== 'month' || view.ym !== todayStr().slice(0,7) || s.left <= 0) return '';
+  const now = new Date(), dim = new Date(now.getFullYear(), now.getMonth()+1, 0).getDate();
+  return `ca. ${eur(s.left / (dim - now.getDate() + 1))} pro Tag bis Monatsende`;
+}
+
+/* ---------- Darstellung ---------- */
+function render(){
+  $('#month-label').textContent = monthLabel(view.ym);
+  $('#this-month').hidden = view.ym === todayStr().slice(0,7);
+  const app = $('#app');
+  if(!loaded){ return; }
+  if(view.sel && !data.budgets.some(b => b.id === view.sel)) view.sel = null;
+  if(!data.budgets.length){
+    app.innerHTML = `<section class="welcome">
+      <h2>Womit fängst du an?</h2>
+      <p>Lege ein Budget an, zum Beispiel „Reisekosten“ mit 1.000 € pro Monat. Bei jeder Ausgabe fragt dich die App dann Schritt für Schritt nach Budget, Datum und Betrag.</p>
+      <button class="btn primary" data-act="new-budget">Erstes Budget anlegen</button></section>`;
+    return;
+  }
+  app.innerHTML = `${summaryHTML()}<div class="grid">
+    <section aria-labelledby="h-b"><h2 class="sec" id="h-b">Budgets</h2>
+      <p class="sec-sub">Wähle ein Budget, um nur dessen Ausgaben zu sehen.</p>
+      ${data.budgets.map(rowHTML).join('')}</section>
+    <section aria-labelledby="h-l">${rightHTML()}</section></div>`;
+}
+function rowHTML(b){
+  const s = stats(b, view.ym), st = s.left < 0 ? 'over' : (s.ratio >= .85 ? 'warn' : 'ok');
+  const [i,d] = splitNum(s.left), hint = paceHint(b,s), sel = view.sel === b.id, yl = yearLine(b);
+  const per = b.period === 'year' ? `pro Jahr (${view.ym.slice(0,4)})` : PERIODS[b.period];
+  return `<article class="budget ${sel ? 'is-sel' : ''}">
+    <button class="pick" data-act="select" data-id="${b.id}" aria-pressed="${sel}">
+      <span class="b-name">${esc(b.name)}</span>
+      <span class="b-limit">${eur(b.amount)} ${per}</span>
+      <span class="b-left st-${st}"><b>${s.left < 0 ? '−' : ''}${i}</b><small>,${d} €</small><em>${s.left < 0 ? 'überzogen' : 'verbleibend'}</em></span>
+      <span class="gauge st-${st}" aria-hidden="true"><i style="width:${Math.min(100, s.ratio*100).toFixed(1)}%"></i></span>
+      <span class="b-spent">${eur(s.spent)} ausgegeben${hint ? `<br>${hint}` : ''}${yl}</span>
+    </button>
+    <button class="edit" data-act="edit-budget" data-id="${b.id}" aria-label="Budget ${esc(b.name)} bearbeiten">Bearbeiten</button>
+  </article>`;
+}
+function ledgerHTML(){
+  const b = data.budgets.find(x => x.id === view.sel);
+  let list, title, sub, full = false;
+  if(b){
+    list = data.expenses.filter(e => inPeriod(b,e,view.ym)); title = b.name;
+    sub = b.period === 'month' ? monthLabel(view.ym) : b.period === 'year' ? view.ym.slice(0,4) : 'Gesamter Zeitraum';
+    full = b.period !== 'month';
+  } else {
+    list = data.expenses.filter(e => e.date.startsWith(view.ym)); title = 'Alle Ausgaben'; sub = monthLabel(view.ym);
+  }
+  list = list.slice().sort((a,c) => c.date.localeCompare(a.date) || c.ts - a.ts);
+  const total = r2(list.reduce((s,e) => s + e.amount, 0));
+  const name = id => (data.budgets.find(x => x.id === id) || {name:'?'}).name;
+  const items = list.map(e => `<li class="entry">
+      <time class="e-date" datetime="${e.date}">${fmtDate(e.date, full)}</time>
+      <div class="e-main">${b
+        ? (e.note ? esc(e.note) : '<span class="none">Ohne Beschreibung</span>')
+        : (e.note ? `${esc(e.note)}<small>${esc(name(e.budgetId))}</small>` : esc(name(e.budgetId)))}</div>
+      <span class="e-amt">${eur(e.amount)}</span>
+      <span class="e-act">
+        <button data-act="edit-expense" data-id="${e.id}" aria-label="Ausgabe vom ${fmtDate(e.date,true)} ändern">Ändern</button>
+        <button class="del" data-act="del-expense" data-id="${e.id}" aria-label="Ausgabe vom ${fmtDate(e.date,true)} löschen">Löschen</button>
+      </span></li>`).join('');
+  return `<h2 class="sec" id="h-l">${esc(title)}</h2><p class="sec-sub">${sub}</p>
+    ${list.length
+      ? `<ul class="entries">${items}</ul><div class="total"><span>Summe</span><span>${eur(total)}</span></div>`
+      : `<p class="empty">Noch keine Ausgaben in diesem Zeitraum.</p><button class="btn primary" data-act="add-expense">Ausgabe erfassen</button>`}`;
+}
+
+/* ---------- Jahresübersicht ---------- */
+const SHORT = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+function yearRows(b, year){
+  const byM = Array(12).fill(0);
+  data.expenses.forEach(e => { if(e.budgetId === b.id && e.date.startsWith(year + '-')) byM[+e.date.slice(5,7) - 1] += e.amount; });
+  const rows = []; let cum = 0, months = 0;
+  for(let m = 1; m <= 12; m++){
+    const ym = `${year}-${pad(m)}`, spent = r2(byM[m-1]);
+    cum = r2(cum + spent);
+    const isM = b.period === 'month', on = isM ? (!b.start || ym >= b.start) : true;
+    if(isM && on) months++;
+    const cumBudget = isM ? r2(b.amount * months) : b.amount;
+    rows.push({ m, ym, spent, on, months, monthLeft: isM && on ? r2(b.amount - spent) : null, cumSpent: cum, cumBudget, cumLeft: r2(cumBudget - cum) });
+  }
+  return rows;
+}
+function yearLine(b){
+  if(b.period !== 'month') return '';
+  const m = +view.ym.slice(5), r = yearRows(b, view.ym.slice(0,4))[m-1];
+  if(r.months < 2) return '';
+  return `<br><span class="${r.cumLeft < 0 ? 'neg' : ''}">Seit Jahresbeginn: ${eur(r.cumLeft)} verbleibend</span>`;
+}
+function rightHTML(){
+  const btn = (k, l) => `<button class="tab" data-act="tab" data-tab="${k}" aria-pressed="${view.tab === k}">${l}</button>`;
+  return `<div class="tabs" role="group" aria-label="Ansicht">${btn('ledger','Ausgaben')}${btn('year','Jahresübersicht')}${btn('events','Team-Events')}</div>` + (view.tab === 'year' ? yearHTML() : view.tab === 'events' ? eventsHTML() : ledgerHTML());
+}
+function yearHTML(){
+  const year = view.ym.slice(0,4), m = +view.ym.slice(5);
+  const sel = data.budgets.find(x => x.id === view.sel);
+  const list = (sel ? [sel] : data.budgets).filter(b => b.period !== 'total');
+  const head = `<h2 class="sec" id="h-l">${sel ? esc(sel.name) : 'Alle Budgets'}</h2><p class="sec-sub">Jahr ${year}. Nicht ausgegebenes Monatsbudget bleibt im Jahresbudget erhalten.</p>`;
+  if(!list.length) return head + '<p class="empty">Für Budgets mit dem Zeitraum „insgesamt“ gibt es keine Jahresübersicht.</p>';
+  return head + list.map(b => yearBlock(b, year, m, !sel)).join('');
+}
+function yearBlock(b, year, m, showName){
+  const rows = yearRows(b, year), cur = rows[m-1], isM = b.period === 'month';
+  const neg = v => v < 0 ? ' neg' : '';
+  let sum;
+  if(isM && cur.months === 0){
+    sum = `<div class="y-sum"><span>Dieses Monatsbudget gilt ab ${monthLabel(b.start)}.</span></div>`;
+  } else {
+    const what = isM
+      ? `${cur.months} × ${eur(b.amount)} = ${eur(cur.cumBudget)} Budget bis ${MONTHS[m-1]}, abzüglich ${eur(cur.cumSpent)} Ausgaben`
+      : `${eur(b.amount)} Jahresbudget, abzüglich ${eur(cur.cumSpent)} Ausgaben bis ${MONTHS[m-1]}`;
+    sum = `<div class="y-sum"><b class="${neg(cur.cumLeft).trim()}">${eur(cur.cumLeft)}</b><span>${cur.cumLeft < 0 ? 'überzogen' : 'verbleibend'} im Jahr bis ${MONTHS[m-1]}</span><small>${what}</small></div>`;
+  }
+  const body = rows.map(r => {
+    const cls = [r.m === m ? 'now' : '', r.m > m ? 'future' : '', !r.on ? 'off' : ''].join(' ').trim();
+    const show = r.on || !isM;
+    return `<tr class="${cls}"><th scope="row"><button class="mbtn" data-act="goto-month" data-ym="${r.ym}" aria-label="${monthLabel(r.ym)} anzeigen">${SHORT[r.m-1]}</button></th>
+      <td>${r.spent ? eur(r.spent) : '–'}</td>
+      ${isM ? `<td class="${neg(r.monthLeft).trim()}">${r.on ? eur(r.monthLeft) : '–'}</td>` : ''}
+      <td class="${show ? neg(r.cumLeft).trim() : ''}">${show ? eur(r.cumLeft) : '–'}</td></tr>`;
+  }).join('');
+  return `<div class="y-block">${showName ? `<h3 class="y-name">${esc(b.name)}</h3>` : ''}${sum}
+    <table class="ytable"><caption class="sr">Jahresübersicht ${esc(b.name)} ${year}</caption>
+    <thead><tr><th scope="col">Monat</th><th scope="col">Ausgaben</th>${isM ? '<th scope="col">Rest im Monat</th>' : ''}<th scope="col">Rest im Jahr</th></tr></thead>
+    <tbody>${body}</tbody></table></div>`;
+}
+function startOptions(sel){
+  const y = new Date().getFullYear(), list = [];
+  for(let yy = y - 2; yy <= y + 1; yy++) for(let m = 1; m <= 12; m++) list.push(`${yy}-${pad(m)}`);
+  if(sel && !list.includes(sel)){ list.push(sel); list.sort(); }
+  return list.map(v => `<option value="${v}" ${v === sel ? 'selected' : ''}>${monthLabel(v)}</option>`).join('');
+}
+
+/* ---------- Gesamtsaldo und Team-Events ---------- */
+let evd = null;
+function planBudgets(){ const p = data.plan; return p.scope === 'all' ? data.budgets : data.budgets.filter(b => b.id === p.scope); }
+function totals(list, ym){
+  const year = ym.slice(0,4), m = +ym.slice(5); let asOf = 0, yearEnd = 0;
+  list.forEach(b => {
+    if(b.period === 'total'){
+      const l = r2(b.amount - data.expenses.filter(e => e.budgetId === b.id).reduce((s,e) => s + e.amount, 0));
+      asOf += l; yearEnd += l;
+    } else {
+      const rows = yearRows(b, year); asOf += rows[m-1].cumLeft; yearEnd += rows[11].cumLeft;
+    }
+  });
+  return { asOf: r2(asOf), yearEnd: r2(yearEnd) };
+}
+function planEval(ym){
+  const t = totals(planBudgets(), ym), exp = data.plan.expected || 0, start = r2(t.yearEnd - exp);
+  let avail = start;
+  const rows = data.plan.events.map(e => {
+    if(e.amount <= avail + 1e-9){ avail = r2(avail - e.amount); return { e, ok:true, rest:avail }; }
+    return { e, ok:false, miss:r2(e.amount - avail) };
+  });
+  return { t, exp, start, rows, rest:avail, okCount: rows.filter(r => r.ok).length };
+}
+function numHTML(v){ const [i,d] = splitNum(v); return `<b>${v < 0 ? '−' : ''}${i}</b><small>,${d} €</small>`; }
+function scopeName(){ const b = data.budgets.find(x => x.id === data.plan.scope); return b ? `„${esc(b.name)}“` : 'allen Budgets'; }
+function summaryHTML(){
+  if(!data.budgets.length) return '';
+  const year = view.ym.slice(0,4), m = +view.ym.slice(5), all = totals(data.budgets, view.ym), ev = planEval(view.ym), n = data.plan.events.length;
+  return `<section class="summary" aria-label="Gesamtsaldo">
+    <div class="sm-main"><span class="sm-label">Gesamtsaldo bis ${MONTHS[m-1]} ${year}</span>
+      <span class="sm-num ${all.asOf < 0 ? 'neg' : ''}">${numHTML(all.asOf)}</span>
+      <span class="sm-sub">verbleibend über alle Budgets</span></div>
+    <div class="sm-item"><span class="sm-label">Für Events bis Dezember verfügbar</span>
+      <strong class="${ev.start < 0 ? 'neg' : ''}">${eur(ev.start)}</strong><span class="sm-sub">aus ${scopeName()}</span></div>
+    <button class="sm-item sm-link" data-act="tab" data-tab="events"><span class="sm-label">Team-Events</span>
+      <strong>${n ? `${ev.okCount} von ${n} finanzierbar` : 'Noch nichts geplant'}</strong><span class="sm-sub">${n ? 'Details ansehen' : 'Event planen'}</span></button>
+  </section>`;
+}
+function eventsHTML(){
+  const p = data.plan, ev = planEval(view.ym), year = view.ym.slice(0,4), m = +view.ym.slice(5), list = planBudgets();
+  const opts = [['all','Alle Budgets'], ...data.budgets.map(b => [b.id, b.name])]
+    .map(([v,l]) => `<option value="${v}" ${p.scope === v ? 'selected' : ''}>${esc(l)}</option>`).join('');
+  const ids = new Set(list.map(b => b.id));
+  const spentSoFar = r2(data.expenses.filter(e => ids.has(e.budgetId) && e.date.startsWith(year + '-') && +e.date.slice(5,7) <= m).reduce((s,e) => s + e.amount, 0));
+  const avg = spentSoFar > 0 ? `Zum Vergleich: Bisher wurden im Schnitt ${eur(r2(spentSoFar / m))} pro Monat ausgegeben (Januar bis ${MONTHS[m-1]}).` : 'Zum Beispiel Reisekosten, die bis Dezember noch anfallen.';
+  const items = ev.rows.map((r, i) => `<li class="ev ${r.ok ? '' : 'no'}">
+      <div><span class="ev-name">${esc(r.e.name)}</span>
+        <span class="ev-state">${r.ok ? `Finanzierbar, danach bleiben ${eur(r.rest)}` : `Reicht nicht, es fehlen ${eur(r.miss)}`}</span></div>
+      <span class="ev-amt">${eur(r.e.amount)}</span>
+      <span class="ev-act">
+        <button data-act="move-event" data-id="${r.e.id}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="${esc(r.e.name)} nach oben">Nach oben</button>
+        <button data-act="move-event" data-id="${r.e.id}" data-dir="1" ${i === ev.rows.length - 1 ? 'disabled' : ''} aria-label="${esc(r.e.name)} nach unten">Nach unten</button>
+        <button data-act="edit-event" data-id="${r.e.id}" aria-label="${esc(r.e.name)} ändern">Ändern</button>
+        <button class="del" data-act="del-event" data-id="${r.e.id}" aria-label="${esc(r.e.name)} löschen">Löschen</button>
+      </span></li>`).join('');
+  const rows = list.map(b => { const t = totals([b], view.ym); return `<tr><th scope="row">${esc(b.name)}</th><td class="${t.asOf < 0 ? 'neg' : ''}">${eur(t.asOf)}</td><td class="${t.yearEnd < 0 ? 'neg' : ''}">${eur(t.yearEnd)}</td></tr>`; }).join('');
+  return `<h2 class="sec" id="h-l">Team-Events</h2>
+    <p class="sec-sub">Die Liste wird von oben nach unten finanziert. Was nicht mehr reicht, wird übersprungen.</p>
+    <div class="field"><label for="p-scope">Finanzieren aus</label><select id="p-scope">${opts}</select></div>
+    <div class="y-sum"><b class="${ev.start < 0 ? 'neg' : ''}">${eur(ev.start)}</b><span>für Events bis Dezember ${year} verfügbar</span>
+      <small>Saldo bis Dezember: ${eur(ev.t.yearEnd)}${ev.exp ? `, abzüglich ${eur(ev.exp)} erwarteter Ausgaben` : ''}. Voraussetzung: Es wird nichts weiter ausgegeben.</small></div>
+    <div class="field" style="margin-top:18px"><label for="p-expected">Noch erwartete Ausgaben bis Jahresende</label>
+      <div class="amount-wrap sm"><input type="text" id="p-expected" inputmode="decimal" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="0,00" value="${ev.exp ? inputAmount(ev.exp) : ''}"><span>€</span></div>
+      <p class="hint" style="margin:6px 0 0">${avg}</p></div>
+    ${ev.rows.length ? `<ul class="events">${items}</ul><p class="${ev.rest < 0 ? 'neg' : ''}" style="margin:0 0 16px"><strong>${eur(ev.rest)}</strong> bleiben nach den finanzierbaren Events übrig.</p>` : '<p class="empty">Noch keine Events geplant.</p>'}
+    <button class="btn primary" data-act="add-event">Event hinzufügen</button>
+    <h3 class="ev-head">Saldo nach Budget</h3>
+    <table class="ytable names"><caption class="sr">Saldo je Budget</caption>
+      <thead><tr><th scope="col">Budget</th><th scope="col">Bis ${SHORT[m-1]}</th><th scope="col">Bis Dez</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><th scope="row">Summe</th><td class="${ev.t.asOf < 0 ? 'neg' : ''}">${eur(ev.t.asOf)}</td><td class="${ev.t.yearEnd < 0 ? 'neg' : ''}">${eur(ev.t.yearEnd)}</td></tr></tfoot></table>`;
+}
+function openEvent(id){
+  const e = id && data.plan.events.find(x => x.id === id);
+  evd = e ? { id:e.id, name:e.name, amount:inputAmount(e.amount) } : { id:null, name:'', amount:'' };
+  wiz = null; bd = null; openDlg('event');
+}
+function eventHTML(){
+  return `<h2>${evd.id ? 'Event ändern' : 'Neues Team-Event'}</h2><p class="ctx">Zum Beispiel „Weihnachtsfeier“ mit den erwarteten Kosten.</p>
+    <div class="field"><label for="f-evname">Name</label><input type="text" id="f-evname" maxlength="60" autocomplete="off" placeholder="z. B. Weihnachtsfeier" value="${esc(evd.name)}"></div>
+    <div class="field"><label for="f-evamount">Geschätzte Kosten</label><div class="amount-wrap"><input type="text" id="f-evamount" inputmode="decimal" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done" placeholder="0,00" value="${esc(evd.amount)}"><span>€</span></div></div>
+    <p id="err" class="err" role="alert"></p>
+    <div class="foot"><button class="btn" data-act="dlg-close">Abbrechen</button><button class="btn primary" data-act="event-save">Speichern</button></div>`;
+}
+function saveEvent(){
+  const name = $('#f-evname', dlg).value.trim(), raw = $('#f-evamount', dlg).value, a = parseAmount(raw);
+  evd.name = name; evd.amount = raw;
+  if(!name) return setErr('Bitte gib dem Event einen Namen.');
+  if(!(a > 0)) return setErr('Bitte gib die erwarteten Kosten an, zum Beispiel 800.');
+  if(evd.id) Object.assign(data.plan.events.find(x => x.id === evd.id), { name, amount:a });
+  else data.plan.events.push({ id:uid(), name, amount:a });
+  persist(); dlg.close(); view.tab = 'events'; render(); toast(`Event „${name}“ gespeichert.`);
+}
+function deleteEvent(id){
+  const snap = JSON.stringify(data), e = data.plan.events.find(x => x.id === id); if(!e) return;
+  data.plan.events = data.plan.events.filter(x => x.id !== id); persist(); render();
+  toast(`Event „${e.name}“ gelöscht.`, () => { data = JSON.parse(snap); persist(); render(); });
+}
+function moveEvent(id, dir){
+  const a = data.plan.events, i = a.findIndex(x => x.id === id), j = i + dir;
+  if(i < 0 || j < 0 || j >= a.length) return;
+  [a[i], a[j]] = [a[j], a[i]]; persist(); render();
+}
+
+/* ---------- Dialoge ---------- */
+function openDlg(mode){ dmode = mode; renderDlg(); if(!dlg.open) dlg.showModal(); }
+function renderDlg(){
+  const html = dmode === 'wiz' ? wizHTML() : dmode === 'edit' ? editHTML() : dmode === 'budget' ? budgetHTML() : dmode === 'event' ? eventHTML() : backupHTML();
+  dlg.innerHTML = `<div class="dlg">${html}</div>`;
+  const h = $('h2', dlg); if(h) h.id = 'dlg-title';
+  const f = $('[data-focus]', dlg) || $('input:not([type=radio]),select', dlg) || $('button.choice', dlg);
+  if(f){ f.focus(); if(f.select && f.type === 'text') f.select(); }
+  updatePreview();
+}
+function setErr(m){ const el = $('#err', dlg); if(el) el.textContent = m; }
+
+/* Ausgabe erfassen: eine Frage pro Schritt */
+function openExpense(){
+  const pre = data.budgets.length === 1 ? data.budgets[0].id : view.sel;
+  wiz = { mode:'new', step: pre ? 1 : 0, budgetId: pre || null, date: todayStr(), amount:'', note:'' };
+  bd = null; openDlg('wiz');
+}
+function openEditExpense(id){
+  const e = data.expenses.find(x => x.id === id); if(!e) return;
+  wiz = { mode:'edit', editId:id, budgetId:e.budgetId, date:e.date, amount:inputAmount(e.amount), note:e.note || '' };
+  bd = null; openDlg('edit');
+}
+function wizHTML(){
+  const w = wiz, b = data.budgets.find(x => x.id === w.budgetId);
+  const prog = [0,1,2,3].map(i => `<span class="${i <= w.step ? 'on' : ''}"></span>`).join('');
+  let q, ctx, body;
+  if(w.step === 0){
+    q = 'Welches Budget?'; ctx = 'Dem gewählten Budget wird die Ausgabe zugeordnet.';
+    body = data.budgets.map(x => {
+      const s = stats(x, view.ym);
+      return `<button class="choice ${x.id === w.budgetId ? 'on' : ''}" data-act="pick-budget" data-id="${x.id}" ${x.id === w.budgetId ? 'data-focus' : ''}><span>${esc(x.name)}</span><small>${eur(s.left)} verbleibend</small></button>`;
+    }).join('');
+  } else if(w.step === 1){
+    q = 'Welches Datum?'; ctx = `Für „${esc(b.name)}“`;
+    body = `<input type="date" id="f-date" value="${w.date}" aria-label="Datum">
+      <div class="chips"><button class="chip" data-act="chip-date" data-d="today">Heute</button><button class="chip" data-act="chip-date" data-d="yesterday">Gestern</button></div>`;
+  } else if(w.step === 2){
+    q = 'Welcher Betrag?'; ctx = `Für „${esc(b.name)}“ am ${fmtDate(w.date,true)}`;
+    body = `<div class="amount-wrap"><input type="text" id="f-amount" inputmode="decimal" autocomplete="off" placeholder="0,00" value="${esc(w.amount)}" aria-label="Betrag in Euro"><span>€</span></div>
+      <p id="preview" class="preview" aria-live="polite"></p>`;
+  } else {
+    q = 'Weitere Angaben?'; ctx = `${esc(b.name)}, ${fmtDate(w.date,true)}, ${eur(parseAmount(w.amount))}`;
+    body = `<input type="text" id="f-note" maxlength="120" autocomplete="off" placeholder="z. B. Zug nach Berlin (optional)" value="${esc(w.note)}" aria-label="Weitere Angaben">`;
+  }
+  return `<div class="progress" aria-hidden="true">${prog}</div>
+    <h2>${q}</h2><p class="ctx">${ctx}</p>${body}<p id="err" class="err" role="alert"></p>
+    <div class="foot"><button class="btn" data-act="${w.step === 0 ? 'dlg-close' : 'wiz-back'}">${w.step === 0 ? 'Abbrechen' : 'Zurück'}</button>
+    <button class="btn primary" data-act="wiz-next">${w.step === 3 ? 'Speichern' : 'Weiter'}</button></div>`;
+}
+function editHTML(){
+  const w = wiz;
+  return `<h2>Ausgabe ändern</h2><p class="ctx"></p>
+    <div class="field"><label for="f-budget">Budget</label><select id="f-budget">${data.budgets.map(b => `<option value="${b.id}" ${b.id === w.budgetId ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select></div>
+    <div class="field"><label for="f-date">Datum</label><input type="date" id="f-date" value="${w.date}"></div>
+    <div class="field"><label for="f-amount">Betrag</label><div class="amount-wrap"><input type="text" id="f-amount" inputmode="decimal" autocomplete="off" value="${esc(w.amount)}"><span>€</span></div><p id="preview" class="preview" aria-live="polite"></p></div>
+    <div class="field"><label for="f-note">Weitere Angaben</label><input type="text" id="f-note" maxlength="120" autocomplete="off" value="${esc(w.note)}"></div>
+    <p id="err" class="err" role="alert"></p>
+    <div class="foot"><button class="btn" data-act="dlg-close">Abbrechen</button><button class="btn primary" data-act="edit-save">Speichern</button></div>`;
+}
+const checks = {
+  budget: w => data.budgets.some(b => b.id === w.budgetId) ? '' : 'Bitte wähle ein Budget.',
+  date: w => /^\d{4}-\d{2}-\d{2}$/.test(w.date) && !isNaN(new Date(w.date)) ? '' : 'Bitte gib ein gültiges Datum an.',
+  amount: w => parseAmount(w.amount) > 0 ? '' : 'Bitte gib einen Betrag über 0 an, zum Beispiel 12,50.'
+};
+function collect(){
+  if(!wiz) return;
+  const v = id => { const el = $(id, dlg); return el ? el.value : null; };
+  if(v('#f-budget') !== null) wiz.budgetId = v('#f-budget');
+  if(v('#f-date') !== null) wiz.date = v('#f-date');
+  if(v('#f-amount') !== null) wiz.amount = v('#f-amount');
+  if(v('#f-note') !== null) wiz.note = v('#f-note').trim();
+}
+function updatePreview(){
+  const el = $('#preview', dlg); if(!el || !wiz) return;
+  const b = data.budgets.find(x => x.id === wiz.budgetId), v = parseAmount(wiz.amount);
+  if(!b || !(v > 0) || checks.date(wiz)){ el.textContent = ''; el.className = 'preview'; return; }
+  const left = r2(stats(b, wiz.date.slice(0,7), wiz.editId).left - v);
+  el.textContent = left >= 0 ? `Danach verbleiben ${eur(left)}.` : `Das überzieht das Budget um ${eur(-left)}.`;
+  el.className = 'preview' + (left < 0 ? ' over' : '');
+}
+function wizNext(){
+  collect(); const w = wiz; let e = '';
+  if(w.step === 0) e = checks.budget(w);
+  if(w.step === 1) e = checks.date(w);
+  if(w.step === 2) e = checks.amount(w);
+  if(w.step === 3) e = checks.budget(w) || checks.date(w) || checks.amount(w);
+  if(e) return setErr(e);
+  if(w.step === 3) return commitExpense();
+  w.step++; renderDlg();
+}
+function wizBack(){ collect(); if(wiz.step > 0){ wiz.step--; renderDlg(); } }
+function commitExpense(){
+  const w = wiz, amt = parseAmount(w.amount);
+  if(w.editId){
+    Object.assign(data.expenses.find(x => x.id === w.editId), { budgetId:w.budgetId, date:w.date, amount:amt, note:w.note });
+  } else {
+    data.expenses.push({ id:uid(), budgetId:w.budgetId, date:w.date, amount:amt, note:w.note, ts:Date.now() });
+  }
+  const b = data.budgets.find(x => x.id === w.budgetId);
+  view.ym = w.date.slice(0,7); if(view.sel) view.sel = w.budgetId;
+  persist(); dlg.close(); render();
+  const s = stats(b, view.ym);
+  toast(`${eur(amt)} gebucht. ` + (s.left >= 0 ? `In „${b.name}“ verbleiben ${eur(s.left)}.` : `„${b.name}“ ist um ${eur(-s.left)} überzogen.`));
+}
+function saveEdit(){
+  collect(); const e = checks.budget(wiz) || checks.date(wiz) || checks.amount(wiz);
+  if(e) return setErr(e);
+  commitExpense();
+}
+function deleteExpense(id){
+  const snap = JSON.stringify(data), e = data.expenses.find(x => x.id === id); if(!e) return;
+  data.expenses = data.expenses.filter(x => x.id !== id); persist(); render();
+  toast(`Ausgabe vom ${fmtDate(e.date,true)} gelöscht.`, () => { data = JSON.parse(snap); persist(); render(); });
+}
+
+/* Budget anlegen oder bearbeiten */
+function openBudget(id){
+  const b = id && data.budgets.find(x => x.id === id);
+  bd = b ? { id:b.id, name:b.name, amount:inputAmount(b.amount), period:b.period, start:b.start || (view.ym.slice(0,4) + '-01'), confirm:false } : { id:null, name:'', amount:'', period:'month', start:todayStr().slice(0,4) + '-01', confirm:false };
+  wiz = null; openDlg('budget');
+}
+function budgetHTML(){
+  const b = bd;
+  if(b.confirm){
+    const n = data.expenses.filter(e => e.budgetId === b.id).length;
+    return `<h2>Budget löschen?</h2><p class="ctx">„${esc(b.name)}“ und ${n === 1 ? 'die zugehörige Ausgabe' : `alle ${n} zugehörigen Ausgaben`} werden entfernt. Danach kannst du es kurz rückgängig machen.</p>
+      <div class="foot"><button class="btn" data-act="bud-cancel-delete" data-focus>Behalten</button><button class="btn danger solid" data-act="bud-delete-now">Endgültig löschen</button></div>`;
+  }
+  const startOpts = startOptions(b.start);
+  const opt = (v, label) => `<label><input type="radio" name="period" value="${v}" ${b.period === v ? 'checked' : ''}><span>${label}</span></label>`;
+  return `<h2>${b.id ? 'Budget bearbeiten' : 'Neues Budget'}</h2><p class="ctx">${b.id ? 'Änderungen gelten auch für vergangene Zeiträume.' : 'Zum Beispiel „Reisekosten“ mit 1.000 € pro Monat.'}</p>
+    <div class="field"><label for="f-name">Name</label><input type="text" id="f-name" maxlength="60" autocomplete="off" placeholder="z. B. Reisekosten" value="${esc(b.name)}"></div>
+    <div class="field"><label for="f-bamount">Betrag</label><div class="amount-wrap"><input type="text" id="f-bamount" inputmode="decimal" autocomplete="off" placeholder="1.000,00" value="${esc(b.amount)}"><span>€</span></div></div>
+    <fieldset class="seg"><legend>Zeitraum</legend><div class="opts">${opt('month','pro Monat')}${opt('year','pro Jahr')}${opt('total','insgesamt')}</div></fieldset>
+    <div class="field" id="start-field" ${b.period !== 'month' ? 'hidden' : ''}><label for="f-start">Gilt ab</label><select id="f-start">${startOpts}</select><p class="hint" style="margin:6px 0 0">Ab diesem Monat sammelt sich nicht ausgegebenes Geld im Jahresbudget an.</p></div>
+    <p id="err" class="err" role="alert"></p>
+    <div class="foot">${b.id ? '<button class="btn danger grow" data-act="bud-delete">Löschen</button>' : ''}<button class="btn" data-act="dlg-close">Abbrechen</button><button class="btn primary" data-act="bud-save">Speichern</button></div>`;
+}
+function readBudget(){
+  if(!bd) return;
+  const n = $('#f-name', dlg), a = $('#f-bamount', dlg), p = $('input[name=period]:checked', dlg);
+  if(n) bd.name = n.value.trim(); if(a) bd.amount = a.value; if(p) bd.period = p.value; { const st = $('#f-start', dlg); if(st) bd.start = st.value; }
+}
+function saveBudget(){
+  readBudget();
+  if(!bd.name) return setErr('Bitte gib dem Budget einen Namen.');
+  const amt = parseAmount(bd.amount);
+  if(!(amt > 0)) return setErr('Bitte gib einen Betrag über 0 an, zum Beispiel 1000.');
+  if(bd.id){ Object.assign(data.budgets.find(x => x.id === bd.id), { name:bd.name, amount:amt, period:bd.period, start:bd.period === 'month' ? bd.start : undefined }); }
+  else { const id = uid(); data.budgets.push({ id, name:bd.name, amount:amt, period:bd.period, start:bd.period === 'month' ? bd.start : undefined }); }
+  persist(); dlg.close(); render(); toast(`Budget „${bd.name}“ gespeichert.`);
+}
+function deleteBudget(){
+  const snap = JSON.stringify(data), name = bd.name, id = bd.id;
+  data.budgets = data.budgets.filter(b => b.id !== id); data.expenses = data.expenses.filter(e => e.budgetId !== id);
+  if(view.sel === id) view.sel = null;
+  if(data.plan.scope === id) data.plan.scope = 'all';
+  persist(); dlg.close(); render();
+  toast(`Budget „${name}“ gelöscht.`, () => { data = JSON.parse(snap); persist(); render(); });
+}
+
+/* Sichern */
+function backupHTML(){
+  return `<h2>Sichern</h2><p class="ctx">Deine Daten werden automatisch gespeichert. Zusätzlich kannst du sie exportieren.</p>
+    <button class="choice" data-act="export-csv" data-focus><span>Ausgaben für Excel exportieren</span><small>CSV</small></button>
+    <button class="choice" data-act="export-json"><span>Backup speichern</span><small>JSON</small></button>
+    <button class="choice" data-act="import-json"><span>Backup einspielen</span><small>ersetzt aktuelle Daten</small></button>
+    <p id="err" class="err" role="alert"></p>
+    <div class="foot"><button class="btn" data-act="dlg-close">Schließen</button></div>`;
+}
+function download(name, text, type){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], {type})); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+}
+function exportCSV(){
+  const q = s => `"${String(s).replace(/"/g,'""')}"`, name = id => (data.budgets.find(b => b.id === id) || {name:''}).name;
+  const rows = data.expenses.slice().sort((a,b) => a.date.localeCompare(b.date) || a.ts - b.ts)
+    .map(e => [fmtDate(e.date,true), q(name(e.budgetId)), e.amount.toFixed(2).replace('.',','), q(e.note || '')].join(';'));
+  download(`ausgaben-${todayStr()}.csv`, '\uFEFF' + ['Datum;Budget;Betrag;Notiz', ...rows].join('\r\n'), 'text/csv;charset=utf-8');
+}
+function exportJSON(){ download(`budgetbuch-backup-${todayStr()}.json`, JSON.stringify(data, null, 2), 'application/json'); }
+
+/* ---------- Hinweise ---------- */
+function toast(msg, undo){
+  const t = $('#toast'); undoFn = undo || null;
+  t.innerHTML = `<span>${esc(msg)}</span>${undo ? '<button data-act="undo">Rückgängig</button>' : ''}`;
+  t.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 8000);
+}
+
+/* ---------- Ereignisse ---------- */
+document.addEventListener('click', ev => {
+  if(ev.target === dlg){ dlg.close(); return; }
+  const el = ev.target.closest('[data-act]'); if(!el) return;
+  const id = el.dataset.id;
+  switch(el.dataset.act){
+    case 'prev-month': view.ym = shiftMonth(view.ym,-1); render(); break;
+    case 'next-month': view.ym = shiftMonth(view.ym,1); render(); break;
+    case 'this-month': view.ym = todayStr().slice(0,7); render(); break;
+    case 'select': view.sel = view.sel === id ? null : id; render(); break;
+    case 'tab': view.tab = el.dataset.tab; render(); if(el.classList.contains('sm-link')){ const h = $('#h-l'); if(h) h.scrollIntoView({ block:'start' }); } break;
+    case 'add-event': openEvent(); break;
+    case 'edit-event': openEvent(id); break;
+    case 'del-event': deleteEvent(id); break;
+    case 'move-event': moveEvent(id, +el.dataset.dir); break;
+    case 'event-save': saveEvent(); break;
+    case 'goto-month': view.ym = el.dataset.ym; render(); break;
+    case 'add-expense': data.budgets.length ? openExpense() : openBudget(); break;
+    case 'new-budget': openBudget(); break;
+    case 'edit-budget': openBudget(id); break;
+    case 'edit-expense': openEditExpense(id); break;
+    case 'del-expense': deleteExpense(id); break;
+    case 'backup': wiz = null; bd = null; openDlg('backup'); break;
+    case 'dlg-close': dlg.close(); break;
+    case 'pick-budget': wiz.budgetId = id; wiz.step = 1; renderDlg(); break;
+    case 'chip-date': { const i = $('#f-date', dlg); i.value = el.dataset.d === 'today' ? todayStr() : yesterdayStr(); wiz.date = i.value; i.focus(); break; }
+    case 'wiz-next': wizNext(); break;
+    case 'wiz-back': wizBack(); break;
+    case 'edit-save': saveEdit(); break;
+    case 'bud-save': saveBudget(); break;
+    case 'bud-delete': readBudget(); bd.confirm = true; renderDlg(); break;
+    case 'bud-cancel-delete': bd.confirm = false; renderDlg(); break;
+    case 'bud-delete-now': deleteBudget(); break;
+    case 'export-csv': exportCSV(); break;
+    case 'export-json': exportJSON(); break;
+    case 'import-json': $('#file').click(); break;
+    case 'undo': if(undoFn){ undoFn(); undoFn = null; $('#toast').hidden = true; } break;
+  }
+});
+dlg.addEventListener('input', () => { if(wiz){ collect(); updatePreview(); } });
+dlg.addEventListener('keydown', ev => {
+  if(ev.key !== 'Enter' || ev.isComposing || !ev.target.matches('input[type=text],input[type=date]')) return;
+  ev.preventDefault();
+  if(dmode === 'wiz') wizNext(); else if(dmode === 'edit') saveEdit(); else if(dmode === 'budget') saveBudget(); else if(dmode === 'event') saveEvent();
+});
+document.addEventListener('change', ev => {
+  const t = ev.target;
+  if(t.id === 'p-scope'){ data.plan.scope = t.value; persist(); render(); }
+  else if(t.id === 'p-expected'){ const v = parseAmount(t.value); data.plan.expected = v > 0 ? v : 0; persist(); render(); }
+});
+dlg.addEventListener('change', ev => { if(ev.target.name === 'period'){ const f = $('#start-field', dlg); if(f) f.hidden = ev.target.value !== 'month'; } });
+dlg.addEventListener('close', () => { wiz = null; bd = null; evd = null; });
+$('#file').addEventListener('change', ev => {
+  const f = ev.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    try{
+      const clean = sanitize(JSON.parse(r.result)), snap = JSON.stringify(data);
+      data = clean; view.sel = null; persist(); dlg.close(); render();
+      toast(`Backup eingespielt: ${clean.budgets.length} Budgets, ${clean.expenses.length} Ausgaben.`, () => { data = JSON.parse(snap); persist(); render(); });
+    }catch(e){ setErr('Diese Datei ist kein gültiges Budgetbuch-Backup.'); }
+  };
+  r.readAsText(f); ev.target.value = '';
+});
+
+/* ---------- Start ---------- */
+(async () => {
+  const saved = await loadData();
+  if(saved){ try{ data = sanitize(saved); }catch(e){} }
+  loaded = true; render();
+  setTimeout(() => document.body.classList.remove('intro'), 1500);
+})();
+})();
+</script>
+</body>
+</html>
